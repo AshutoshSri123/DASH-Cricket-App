@@ -58,6 +58,16 @@ struct ScorecardView: View {
                     .fontWeight(.semibold)
                     .foregroundColor(gameState.battingTeam == 0 ? .blue : .red)
                 
+                // Show warning if only one batter left
+                if gameState.isOnlyOneBatterLeft {
+                    Text("⚠️ Only one batter remaining - Can only score boundaries!")
+                        .font(.headline)
+                        .foregroundColor(.orange)
+                        .padding()
+                        .background(Color.orange.opacity(0.1))
+                        .cornerRadius(10)
+                }
+                
                 // Middle Section - Player Stats
                 VStack(spacing: 15) {
                     // Current Batters
@@ -128,7 +138,7 @@ struct ScorecardView: View {
                 
                 // Bottom Section - Ball Event Input
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 3), spacing: 15) {
-                    // Scoring buttons
+                    // Scoring buttons - disable 1,2,3,4 if only one batter left
                     ForEach([("Dot", 0), ("1", 1), ("2", 2), ("3", 3), ("4", 4), ("5", 5)], id: \.0) { label, runs in
                         Button(action: {
                             gameState.updateScore(runs: runs)
@@ -138,12 +148,13 @@ struct ScorecardView: View {
                                 .font(.headline)
                                 .foregroundColor(.white)
                                 .frame(width: 80, height: 50)
-                                .background(Color.blue)
+                                .background(shouldDisableRunsButton(runs: runs) ? Color.gray : Color.blue)
                                 .cornerRadius(10)
                         }
+                        .disabled(shouldDisableRunsButton(runs: runs))
                     }
                     
-                    // Boundary buttons
+                    // Boundary buttons - these are always allowed
                     ForEach([("10", 10), ("15", 15), ("20", 20), ("25", 25)], id: \.0) { label, runs in
                         Button(action: {
                             gameState.updateScore(runs: runs)
@@ -159,9 +170,10 @@ struct ScorecardView: View {
                     }
                     
                     // Special buttons
+                    // Special buttons
                     Button(action: {
                         gameState.updateScore(runs: 0, isWicket: true)
-                        showBatterSelection = true
+                        checkForPlayerChanges()  // Only check for quota completion, not automatic batter change
                     }) {
                         Text("Wicket\n(-25)")
                             .font(.caption)
@@ -171,6 +183,7 @@ struct ScorecardView: View {
                             .background(Color.red)
                             .cornerRadius(10)
                     }
+
                     
                     Button(action: {
                         gameState.updateScore(runs: 1)
@@ -206,9 +219,10 @@ struct ScorecardView: View {
                             .fontWeight(.bold)
                             .foregroundColor(.white)
                             .frame(width: 80, height: 50)
-                            .background(Color.brown)
+                            .background(gameState.isOnlyOneBatterLeft ? Color.gray : Color.brown)
                             .cornerRadius(10)
                     }
+                    .disabled(gameState.isOnlyOneBatterLeft)  // Disable byes when only one batter left
                     
                     Button(action: {
                         showCustomInput = true
@@ -265,19 +279,36 @@ struct ScorecardView: View {
                     .keyboardType(.numberPad)
                 Button("OK") {
                     if let runs = Int(customRuns) {
-                        gameState.updateScore(runs: runs)
-                        checkForPlayerChanges()
+                        // Only allow boundary runs (10, 15, 20, 25) when only one batter left
+                        if gameState.isOnlyOneBatterLeft && ![10, 15, 20, 25].contains(runs) {
+                            // Don't allow this run
+                        } else {
+                            gameState.updateScore(runs: runs)
+                            checkForPlayerChanges()
+                        }
                     }
                     customRuns = ""
                 }
                 Button("Cancel", role: .cancel) {
                     customRuns = ""
                 }
+            } message: {
+                if gameState.isOnlyOneBatterLeft {
+                    Text("Only one batter remaining - Can only score boundaries (10, 15, 20, 25)")
+                } else {
+                    Text("Enter custom runs")
+                }
             }
         }
     }
     
-    // MARK: - Helper Methods for Getting Updated Player Info
+    // Helper function to determine if a runs button should be disabled
+    private func shouldDisableRunsButton(runs: Int) -> Bool {
+        // Disable 1, 2, 3, 4 runs when only one batter is left
+        return gameState.isOnlyOneBatterLeft && [1, 2, 3, 4].contains(runs)
+    }
+    
+    // ... existing helper methods remain the same ...
     
     private func getOnStrikeBatter() -> Player? {
         let battingTeamPlayers = gameState.battingTeam == 0 ? gameState.teamA.players : gameState.teamB.players
@@ -308,8 +339,6 @@ struct ScorecardView: View {
         return nil
     }
     
-    // MARK: - Player Change Detection
-    
     private func checkForPlayerChanges() {
         checkForBowlerChange()
         checkForBatterChange()
@@ -318,7 +347,6 @@ struct ScorecardView: View {
     private func checkForBowlerChange() {
         guard let currentBowler = getCurrentBowler() else { return }
         
-        // Show bowler selection only when over is complete
         if currentBowler.ballsInCurrentOver == 0 &&
            currentBowler.ballsBowled > 0 &&
            gameState.ballsCompleted < gameState.totalBallsInInnings {
@@ -327,23 +355,16 @@ struct ScorecardView: View {
     }
     
     private func checkForBatterChange() {
-        let battingTeamPlayers = gameState.battingTeam == 0 ? gameState.teamA.players : gameState.teamB.players
-        
-        // Check if batter 1 has completed their quota
-        if let batter1 = gameState.currentBatter1,
-           let player1 = battingTeamPlayers.first(where: { $0.id == batter1.id }),
-           player1.ballsFaced >= player1.ballQuota {
+        if let onStrikeBatter = getOnStrikeBatter(),
+           onStrikeBatter.ballsFaced >= onStrikeBatter.ballQuota {
             showBatterSelection = true
             return
         }
         
-        // Check if batter 2 has completed their quota
-        if let batter2 = gameState.currentBatter2,
-           let player2 = battingTeamPlayers.first(where: { $0.id == batter2.id }),
-           player2.ballsFaced >= player2.ballQuota {
+        if let nonStrikeBatter = getNonStrikeBatter(),
+           nonStrikeBatter.ballsFaced >= nonStrikeBatter.ballQuota {
             showBatterSelection = true
             return
         }
     }
-
 }

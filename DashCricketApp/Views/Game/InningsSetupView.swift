@@ -188,7 +188,7 @@ struct InningsSetupView: View {
                 
                 Picker("Select Bowler", selection: $selectedBowler) {
                     Text("Select Player").tag(nil as Player?)
-                    ForEach(bowlingPlayers, id: \.id) { player in
+                    ForEach(gameState.availableBowlers, id: \.id) { player in
                         Text("\(player.name) (\(player.role.rawValue))").tag(player as Player?)
                     }
                 }
@@ -213,6 +213,7 @@ struct InningsSetupView: View {
             }
         }
     }
+
     
     private func startInnings() {
         gameState.currentBatter1 = selectedBatter1

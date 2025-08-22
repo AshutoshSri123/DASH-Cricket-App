@@ -5,14 +5,6 @@ struct BowlerChangeView: View {
     @Binding var isPresented: Bool
     @State private var selectedBowler: Player?
     
-    var availableBowlers: [Player] {
-        let team = gameState.bowlingTeam == 0 ? gameState.teamA : gameState.teamB
-        return team.players.filter { player in
-            (player.role == .bowler || player.role == .allRounder) &&
-            player.ballsBowled < player.bowlingQuota
-        }
-    }
-    
     var body: some View {
         NavigationView {
             VStack(spacing: 30) {
@@ -20,24 +12,49 @@ struct BowlerChangeView: View {
                     .font(.title)
                     .fontWeight(.bold)
                 
-                ForEach(availableBowlers, id: \.id) { bowler in
-                    Button(action: {
-                        selectedBowler = bowler
-                        gameState.currentBowler = bowler
-                        isPresented = false
-                    }) {
-                        VStack(alignment: .leading) {
-                            Text(bowler.name)
-                                .font(.headline)
-                                .foregroundColor(.primary)
-                            Text("\(bowler.role.rawValue) - \(bowler.ballsBowled)/\(bowler.bowlingQuota) balls bowled")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                if let lastBowler = gameState.lastBowler {
+                    Text("⚠️ \(lastBowler.name) cannot bowl consecutive overs")
+                        .font(.subheadline)
+                        .foregroundColor(.orange)
                         .padding()
-                        .background(Color.gray.opacity(0.1))
+                        .background(Color.orange.opacity(0.1))
                         .cornerRadius(10)
+                }
+                
+                if gameState.availableBowlers.isEmpty {
+                    Text("No bowlers available!")
+                        .font(.headline)
+                        .foregroundColor(.red)
+                        .padding()
+                } else {
+                    ForEach(gameState.availableBowlers, id: \.id) { bowler in
+                        Button(action: {
+                            selectedBowler = bowler
+                            gameState.currentBowler = bowler
+                            isPresented = false
+                        }) {
+                            VStack(alignment: .leading) {
+                                Text(bowler.name)
+                                    .font(.headline)
+                                    .foregroundColor(.primary)
+                                HStack {
+                                    Text("\(bowler.role.rawValue)")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                    Spacer()
+                                    Text("\(bowler.ballsBowled)/\(bowler.bowlingQuota) balls bowled")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                    Text("• \(bowler.runsConceded) runs")
+                                        .font(.caption)
+                                        .foregroundColor(.red)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding()
+                            .background(Color.gray.opacity(0.1))
+                            .cornerRadius(10)
+                        }
                     }
                 }
                 
