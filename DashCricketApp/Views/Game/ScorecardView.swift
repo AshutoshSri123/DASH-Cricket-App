@@ -303,10 +303,13 @@ struct ScorecardView: View {
     }
     
     // Helper function to determine if a runs button should be disabled
+    // In your ScorecardView, update the shouldDisableRunsButton method:
     private func shouldDisableRunsButton(runs: Int) -> Bool {
         // Disable 1, 2, 3, 4 runs when only one batter is left
-        return gameState.isOnlyOneBatterLeft && [1, 2, 3, 4].contains(runs)
+        let singleBatterLeft = gameState.currentBatter2 == nil || gameState.isOnlyOneBatterLeft
+        return singleBatterLeft && [1, 2, 3, 4].contains(runs)
     }
+
     
     // ... existing helper methods remain the same ...
     

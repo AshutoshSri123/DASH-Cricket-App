@@ -10,7 +10,16 @@ struct InningsSetupView: View {
     
     var battingPlayers: [Player] {
         let team = gameState.battingTeam == 0 ? gameState.teamA : gameState.teamB
-        return team.players.filter { $0.role == .batter || $0.role == .allRounder }
+        // For third innings, only show batters who haven't completed their quota
+        if gameState.currentInnings == .third {
+            return team.players.filter {
+                ($0.role == .batter || $0.role == .allRounder) &&
+                $0.ballsFaced < $0.ballQuota
+            }
+        } else {
+            // For first and second innings, show all eligible batters
+            return team.players.filter { $0.role == .batter || $0.role == .allRounder }
+        }
     }
     
     var bowlingPlayers: [Player] {
@@ -56,6 +65,17 @@ struct InningsSetupView: View {
                 .padding()
                 .background(Color.gray.opacity(0.1))
                 .cornerRadius(15)
+                
+                // Show special message for third innings
+                if gameState.currentInnings == .third {
+                    Text("Third Innings - Only batters with remaining balls can play")
+                        .font(.caption)
+                        .foregroundColor(.orange)
+                        .multilineTextAlignment(.center)
+                        .padding()
+                        .background(Color.orange.opacity(0.1))
+                        .cornerRadius(8)
+                }
             }
             
             if currentStep == 1 {
@@ -82,52 +102,94 @@ struct InningsSetupView: View {
                 .font(.title2)
                 .fontWeight(.semibold)
             
-            VStack(spacing: 15) {
-                VStack(alignment: .leading) {
-                    Text("First Batter")
-                        .font(.headline)
-                    
-                    Picker("Select First Batter", selection: $selectedBatter1) {
-                        Text("Select Player").tag(nil as Player?)
-                        ForEach(battingPlayers, id: \.id) { player in
-                            Text("\(player.name) (\(player.role.rawValue))").tag(player as Player?)
-                        }
-                    }
-                    .pickerStyle(MenuPickerStyle())
-                    .frame(maxWidth: .infinity)
+            if battingPlayers.isEmpty {
+                Text("No batters available with remaining balls!")
+                    .font(.headline)
+                    .foregroundColor(.red)
                     .padding()
-                    .background(Color.gray.opacity(0.1))
+            } else if battingPlayers.count == 1 {
+                // Only one batter left - auto select and move to bowler selection
+                VStack(spacing: 15) {
+                    Text("Only one batter remaining:")
+                        .font(.headline)
+                        .foregroundColor(.orange)
+                    
+                    let singleBatter = battingPlayers[0]
+                    VStack {
+                        Text(singleBatter.name)
+                            .font(.title2)
+                            .fontWeight(.bold)
+                        Text("\(singleBatter.role.rawValue) - \(singleBatter.ballsFaced)/\(singleBatter.ballQuota) balls")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding()
+                    .background(Color.blue.opacity(0.1))
                     .cornerRadius(10)
+                    
+                    Button(action: {
+                        selectedBatter1 = singleBatter
+                        selectedBatter2 = nil // No second batter
+                        onStrike = 0 // Single batter is always on strike
+                        currentStep = 3 // Skip strike selection, go to bowler
+                    }) {
+                        Text("Continue with Single Batter")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                            .frame(width: 250, height: 50)
+                            .background(Color.blue)
+                            .cornerRadius(10)
+                    }
+                }
+            } else {
+                // Normal case - two or more batters available
+                VStack(spacing: 15) {
+                    VStack(alignment: .leading) {
+                        Text("First Batter")
+                            .font(.headline)
+                        
+                        Picker("Select First Batter", selection: $selectedBatter1) {
+                            Text("Select Player").tag(nil as Player?)
+                            ForEach(battingPlayers, id: \.id) { player in
+                                Text("\(player.name) (\(player.role.rawValue)) - \(player.ballsFaced)/\(player.ballQuota) balls").tag(player as Player?)
+                            }
+                        }
+                        .pickerStyle(MenuPickerStyle())
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.gray.opacity(0.1))
+                        .cornerRadius(10)
+                    }
+                    
+                    VStack(alignment: .leading) {
+                        Text("Second Batter")
+                            .font(.headline)
+                        
+                        Picker("Select Second Batter", selection: $selectedBatter2) {
+                            Text("Select Player").tag(nil as Player?)
+                            ForEach(battingPlayers.filter { $0.id != selectedBatter1?.id }, id: \.id) { player in
+                                Text("\(player.name) (\(player.role.rawValue)) - \(player.ballsFaced)/\(player.ballQuota) balls").tag(player as Player?)
+                            }
+                        }
+                        .pickerStyle(MenuPickerStyle())
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.gray.opacity(0.1))
+                        .cornerRadius(10)
+                    }
                 }
                 
-                VStack(alignment: .leading) {
-                    Text("Second Batter")
-                        .font(.headline)
-                    
-                    Picker("Select Second Batter", selection: $selectedBatter2) {
-                        Text("Select Player").tag(nil as Player?)
-                        ForEach(battingPlayers.filter { $0.id != selectedBatter1?.id }, id: \.id) { player in
-                            Text("\(player.name) (\(player.role.rawValue))").tag(player as Player?)
-                        }
+                if selectedBatter1 != nil && selectedBatter2 != nil {
+                    Button(action: {
+                        currentStep = 2
+                    }) {
+                        Text("Next")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                            .frame(width: 200, height: 50)
+                            .background(Color.blue)
+                            .cornerRadius(10)
                     }
-                    .pickerStyle(MenuPickerStyle())
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.gray.opacity(0.1))
-                    .cornerRadius(10)
-                }
-            }
-            
-            if selectedBatter1 != nil && selectedBatter2 != nil {
-                Button(action: {
-                    currentStep = 2
-                }) {
-                    Text("Next")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                        .frame(width: 200, height: 50)
-                        .background(Color.blue)
-                        .cornerRadius(10)
                 }
             }
         }
@@ -213,7 +275,6 @@ struct InningsSetupView: View {
             }
         }
     }
-
     
     private func startInnings() {
         gameState.currentBatter1 = selectedBatter1

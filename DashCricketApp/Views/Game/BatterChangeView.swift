@@ -17,7 +17,6 @@ struct BatterChangeView: View {
     var batterToReplace: String {
         let battingTeamPlayers = gameState.battingTeam == 0 ? gameState.teamA.players : gameState.teamB.players
         
-        // Check which batter has completed their ball quota (not wicket)
         if let batter1 = gameState.currentBatter1,
            let player1 = battingTeamPlayers.first(where: { $0.id == batter1.id }),
            player1.ballsFaced >= player1.ballQuota {
@@ -49,10 +48,31 @@ struct BatterChangeView: View {
                     .cornerRadius(10)
                 
                 if availableBatters.isEmpty {
-                    Text("No more batters available")
-                        .font(.headline)
-                        .foregroundColor(.red)
-                        .padding()
+                    // Handle single batter case
+                    VStack(spacing: 15) {
+                        Text("Only one batter remaining!")
+                            .font(.headline)
+                            .foregroundColor(.blue)
+                        
+                        Text("The remaining batter will continue playing alone for the rest of the innings.")
+                            .font(.subheadline)
+                            .multilineTextAlignment(.center)
+                            .foregroundColor(.secondary)
+                        
+                        Button(action: {
+                            handleSingleBatterSituation()
+                        }) {
+                            Text("Continue with Single Batter")
+                                .font(.headline)
+                                .foregroundColor(.white)
+                                .frame(width: 250, height: 50)
+                                .background(Color.blue)
+                                .cornerRadius(10)
+                        }
+                    }
+                    .padding()
+                    .background(Color.blue.opacity(0.1))
+                    .cornerRadius(15)
                 } else {
                     Text("Select Next Batter")
                         .font(.title2)
@@ -98,6 +118,26 @@ struct BatterChangeView: View {
         }
     }
     
+    private func handleSingleBatterSituation() {
+        let battingTeamPlayers = gameState.battingTeam == 0 ? gameState.teamA.players : gameState.teamB.players
+        
+        // Find the remaining batter (the one who hasn't completed quota)
+        let remainingBatter = battingTeamPlayers.first { player in
+            (player.role == .batter || player.role == .allRounder) &&
+            player.ballsFaced < player.ballQuota &&
+            (player.id == gameState.currentBatter1?.id || player.id == gameState.currentBatter2?.id)
+        }
+        
+        if let remaining = remainingBatter {
+            // Set the remaining batter as batter1 and on strike
+            gameState.currentBatter1 = remaining
+            gameState.currentBatter2 = nil
+            gameState.onStrike = 0 // Always on strike since they're alone
+        }
+        
+        isPresented = false
+    }
+    
     private func replaceBatter(with newBatter: Player) {
         let battingTeamPlayers = gameState.battingTeam == 0 ? gameState.teamA.players : gameState.teamB.players
         
@@ -106,7 +146,6 @@ struct BatterChangeView: View {
            let player1 = battingTeamPlayers.first(where: { $0.id == batter1.id }),
            player1.ballsFaced >= player1.ballQuota {
             
-            // Replace currentBatter1
             gameState.currentBatter1 = newBatter
             isPresented = false
             return
@@ -116,7 +155,6 @@ struct BatterChangeView: View {
            let player2 = battingTeamPlayers.first(where: { $0.id == batter2.id }),
            player2.ballsFaced >= player2.ballQuota {
             
-            // Replace currentBatter2
             gameState.currentBatter2 = newBatter
             isPresented = false
             return
