@@ -104,17 +104,40 @@ class GameState: ObservableObject {
     
     func nextInnings() {
         ballsCompleted = 0
+        
         if currentInnings == .first {
+            // First innings complete, start second innings
             currentInnings = .second
             switchTeams()
+            // Reset current players for new batting team
+            currentBatter1 = nil
+            currentBatter2 = nil
+            currentBowler = nil
+            onStrike = 0
+            
         } else if currentInnings == .second {
+            // Second innings complete, start third innings
             currentInnings = .third
             switchTeams() // Back to original batting team
+            // Reset current players for third innings
+            currentBatter1 = nil
+            currentBatter2 = nil
+            currentBowler = nil
+            onStrike = 0
+            
         } else {
+            // Third innings complete, game over
             gameCompleted = true
             calculateResult()
         }
     }
+
+    // Add this helper property to check if innings just started
+    var isInningsJustStarted: Bool {
+        return ballsCompleted == 0 &&
+               (currentBatter1 == nil || currentBatter2 == nil || currentBowler == nil)
+    }
+
     
     func calculateResult() {
         if teamA.totalRuns > teamB.totalRuns {
@@ -126,13 +149,15 @@ class GameState: ObservableObject {
         }
     }
     
-    func updateScore(runs: Int, isWicket: Bool = false, isByes: Bool = false) {
+    func updateScore(runs: Int, isWicket: Bool = false, isByes: Bool = false, byesFromRunning: Int = 0) {
+        // Add runs to team total
         if battingTeam == 0 {
             teamA.totalRuns += runs
         } else {
             teamB.totalRuns += runs
         }
         
+        // Deduct runs for wicket
         if isWicket {
             if battingTeam == 0 {
                 teamA.totalRuns -= 25
@@ -141,9 +166,10 @@ class GameState: ObservableObject {
             }
         }
         
+        // Increment ball count
         ballsCompleted += 1
         
-        // Update current bowler stats
+        // Update bowler stats
         if let bowlerIndex = getBowlerIndex() {
             if battingTeam == 0 {
                 teamB.players[bowlerIndex].ballsBowled += 1
@@ -157,28 +183,44 @@ class GameState: ObservableObject {
         }
         
         // Update batter stats
-        if !isByes {
-            if let batterIndex = getCurrentBatterIndex() {
-                if battingTeam == 0 {
-                    teamA.players[batterIndex].ballsFaced += 1
+        if let batterIndex = getCurrentBatterIndex() {
+            if battingTeam == 0 {
+                teamA.players[batterIndex].ballsFaced += 1
+                if !isByes {
                     teamA.players[batterIndex].runsScored += runs
-                } else {
-                    teamB.players[batterIndex].ballsFaced += 1
+                }
+            } else {
+                teamB.players[batterIndex].ballsFaced += 1
+                if !isByes {
                     teamB.players[batterIndex].runsScored += runs
                 }
             }
         }
         
-        // Switch strike for odd runs (including byes)
-        if runs % 2 == 1 {
+        // Determine if strike should change
+        var shouldChangeStrike = false
+        
+        if isByes {
+            // For byes, only change strike if running byes are 1 or 3
+            if byesFromRunning == 1 || byesFromRunning == 3 {
+                shouldChangeStrike = true
+            }
+        } else {
+            // For normal runs, only change strike for 1 or 3 runs
+            if runs == 1 || runs == 3 {
+                shouldChangeStrike = true
+            }
+        }
+        
+        if shouldChangeStrike {
             onStrike = onStrike == 0 ? 1 : 0
         }
         
-        // Check if over is complete (5 balls bowled in current over)
+        // Check if over is complete
         if let bowlerIndex = getBowlerIndex() {
-            let bowler = battingTeam == 0 ? teamB.players[bowlerIndex] : teamA.players[bowlerIndex]
-            if bowler.ballsInCurrentOver == 5 {
-                // Over complete, switch strike and reset over count
+            let currentBowler = battingTeam == 0 ? teamB.players[bowlerIndex] : teamA.players[bowlerIndex]
+            if currentBowler.ballsInCurrentOver >= 5 {
+                // Over complete - change strike and reset over
                 onStrike = onStrike == 0 ? 1 : 0
                 if battingTeam == 0 {
                     teamB.players[bowlerIndex].ballsInCurrentOver = 0
@@ -187,15 +229,15 @@ class GameState: ObservableObject {
                     teamA.players[bowlerIndex].ballsInCurrentOver = 0
                     teamA.players[bowlerIndex].oversBowled += 1
                 }
-                // Note: Don't set currentBowler to nil here - let the view handle bowler change
             }
         }
         
-        // Check if innings is complete
+        // Check if innings complete
         if ballsCompleted >= totalBallsInInnings {
             nextInnings()
         }
     }
+
 
     
     private func getBowlerIndex() -> Int? {

@@ -5,13 +5,16 @@ struct ScorecardView: View {
     @State private var showBowlerSelection = false
     @State private var showBatterSelection = false
     @State private var showByesInput = false
-    @State private var byesRuns = ""
     @State private var showCustomInput = false
     @State private var customRuns = ""
+    @State private var byesFromRunning = ""
+    @State private var byesFromBoundary = ""
     
     var body: some View {
         if gameState.gameCompleted {
             FinalScorecardView(gameState: gameState)
+        } else if gameState.isInningsJustStarted {
+            InningsSetupView(gameState: gameState)
         } else {
             VStack(spacing: 20) {
                 // Top Section - Score Display
@@ -56,7 +59,6 @@ struct ScorecardView: View {
                     .foregroundColor(gameState.battingTeam == 0 ? .blue : .red)
                 
                 // Middle Section - Player Stats
-                // Middle Section - Player Stats
                 VStack(spacing: 15) {
                     // Current Batters
                     HStack {
@@ -64,19 +66,14 @@ struct ScorecardView: View {
                             Text("On Strike:")
                                 .font(.headline)
                             
-                            // Get updated batter info from team array
-                            let battingTeamPlayers = gameState.battingTeam == 0 ? gameState.teamA.players : gameState.teamB.players
-                            let currentBatterId = (gameState.onStrike == 0 ? gameState.currentBatter1?.id : gameState.currentBatter2?.id)
-                            
-                            if let batterId = currentBatterId,
-                               let updatedBatter = battingTeamPlayers.first(where: { $0.id == batterId }) {
-                                Text("\(updatedBatter.name)")
+                            if let onStrikeBatter = getOnStrikeBatter() {
+                                Text("\(onStrikeBatter.name)")
                                     .font(.title3)
                                     .fontWeight(.bold)
                                     .foregroundColor(.green)
-                                Text("\(updatedBatter.ballsFaced)/\(updatedBatter.ballQuota) balls")
+                                Text("\(onStrikeBatter.ballsFaced)/\(onStrikeBatter.ballQuota) balls")
                                     .font(.caption)
-                                Text("\(updatedBatter.runsScored) runs")
+                                Text("\(onStrikeBatter.runsScored) runs")
                                     .font(.caption)
                             }
                         }
@@ -87,18 +84,13 @@ struct ScorecardView: View {
                             Text("Non-Strike:")
                                 .font(.headline)
                             
-                            // Get updated non-strike batter info from team array
-                            let battingTeamPlayers = gameState.battingTeam == 0 ? gameState.teamA.players : gameState.teamB.players
-                            let nonStrikeBatterId = (gameState.onStrike == 1 ? gameState.currentBatter1?.id : gameState.currentBatter2?.id)
-                            
-                            if let batterId = nonStrikeBatterId,
-                               let updatedBatter = battingTeamPlayers.first(where: { $0.id == batterId }) {
-                                Text("\(updatedBatter.name)")
+                            if let nonStrikeBatter = getNonStrikeBatter() {
+                                Text("\(nonStrikeBatter.name)")
                                     .font(.title3)
                                     .fontWeight(.bold)
-                                Text("\(updatedBatter.ballsFaced)/\(updatedBatter.ballQuota) balls")
+                                Text("\(nonStrikeBatter.ballsFaced)/\(nonStrikeBatter.ballQuota) balls")
                                     .font(.caption)
-                                Text("\(updatedBatter.runsScored) runs")
+                                Text("\(nonStrikeBatter.runsScored) runs")
                                     .font(.caption)
                             }
                         }
@@ -113,20 +105,16 @@ struct ScorecardView: View {
                             Text("Bowler:")
                                 .font(.headline)
                             
-                            // Get updated bowler info from team array
-                            let bowlingTeamPlayers = gameState.bowlingTeam == 0 ? gameState.teamA.players : gameState.teamB.players
-                            
-                            if let bowlerId = gameState.currentBowler?.id,
-                               let updatedBowler = bowlingTeamPlayers.first(where: { $0.id == bowlerId }) {
-                                Text("\(updatedBowler.name)")
+                            if let currentBowler = getCurrentBowler() {
+                                Text("\(currentBowler.name)")
                                     .font(.title3)
                                     .fontWeight(.bold)
                                     .foregroundColor(.red)
-                                Text("Over: \(updatedBowler.ballsInCurrentOver)/5")
+                                Text("Over: \(currentBowler.ballsInCurrentOver)/5")
                                     .font(.caption)
-                                Text("Total: \(updatedBowler.ballsBowled)/\(updatedBowler.bowlingQuota) balls")
+                                Text("Total: \(currentBowler.ballsBowled)/\(currentBowler.bowlingQuota) balls")
                                     .font(.caption)
-                                Text("Runs: \(updatedBowler.runsConceded)")
+                                Text("Runs: \(currentBowler.runsConceded)")
                                     .font(.caption)
                             }
                             Spacer()
@@ -137,7 +125,6 @@ struct ScorecardView: View {
                     .background(Color.red.opacity(0.1))
                     .cornerRadius(10)
                 }
-
                 
                 // Bottom Section - Ball Event Input
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 3), spacing: 15) {
@@ -186,7 +173,7 @@ struct ScorecardView: View {
                     }
                     
                     Button(action: {
-                        gameState.updateScore(runs: 1) // No ball + 1 free hit
+                        gameState.updateScore(runs: 1)
                         checkForPlayerChanges()
                     }) {
                         Text("No Ball")
@@ -199,7 +186,7 @@ struct ScorecardView: View {
                     }
                     
                     Button(action: {
-                        gameState.updateScore(runs: 1) // Wide + 1 extra
+                        gameState.updateScore(runs: 1)
                         checkForPlayerChanges()
                     }) {
                         Text("Wide")
@@ -248,19 +235,30 @@ struct ScorecardView: View {
             .sheet(isPresented: $showBatterSelection) {
                 BatterChangeView(gameState: gameState, isPresented: $showBatterSelection)
             }
-            .alert("Enter Byes Runs", isPresented: $showByesInput) {
-                TextField("Runs", text: $byesRuns)
+            .alert("Enter Byes Details", isPresented: $showByesInput) {
+                TextField("Running byes (0-4)", text: $byesFromRunning)
                     .keyboardType(.numberPad)
-                Button("OK") {
-                    if let runs = Int(byesRuns) {
-                        gameState.updateScore(runs: runs, isByes: true)
+                TextField("Boundary byes (0 or 4)", text: $byesFromBoundary)
+                    .keyboardType(.numberPad)
+                Button("Add Byes") {
+                    let runningByes = Int(byesFromRunning) ?? 0
+                    let boundaryByes = Int(byesFromBoundary) ?? 0
+                    let totalByes = runningByes + boundaryByes
+                    
+                    if totalByes > 0 {
+                        gameState.updateScore(runs: totalByes, isByes: true, byesFromRunning: runningByes)
                         checkForPlayerChanges()
                     }
-                    byesRuns = ""
+                    
+                    byesFromRunning = ""
+                    byesFromBoundary = ""
                 }
                 Button("Cancel", role: .cancel) {
-                    byesRuns = ""
+                    byesFromRunning = ""
+                    byesFromBoundary = ""
                 }
+            } message: {
+                Text("Enter running byes (1-4) and boundary byes (0 or 4). Strike changes only for 1 or 3 running byes.")
             }
             .alert("Enter Custom Runs", isPresented: $showCustomInput) {
                 TextField("Runs", text: $customRuns)
@@ -279,45 +277,73 @@ struct ScorecardView: View {
         }
     }
     
-    private func checkForPlayerChanges() {
-        // Check if over is complete and need new bowler
-        if let bowler = gameState.currentBowler {
-            let bowlingTeamPlayers = gameState.battingTeam == 0 ? gameState.teamB.players : gameState.teamA.players
-            if let bowlerIndex = bowlingTeamPlayers.firstIndex(where: { $0.id == bowler.id }) {
-                let currentBowler = bowlingTeamPlayers[bowlerIndex]
-                
-                // Show bowler selection only when over is complete
-                if currentBowler.ballsInCurrentOver == 0 &&
-                   currentBowler.ballsBowled > 0 &&
-                   gameState.ballsCompleted < gameState.totalBallsInInnings {
-                    showBowlerSelection = true
-                }
-            }
-        }
+    // MARK: - Helper Methods for Getting Updated Player Info
+    
+    private func getOnStrikeBatter() -> Player? {
+        let battingTeamPlayers = gameState.battingTeam == 0 ? gameState.teamA.players : gameState.teamB.players
+        let currentBatterId = (gameState.onStrike == 0 ? gameState.currentBatter1?.id : gameState.currentBatter2?.id)
         
-        // Check if current batter's quota is complete
-        checkBatterQuotaComplete()
+        if let batterId = currentBatterId {
+            return battingTeamPlayers.first { $0.id == batterId }
+        }
+        return nil
     }
-
-    private func checkBatterQuotaComplete() {
+    
+    private func getNonStrikeBatter() -> Player? {
+        let battingTeamPlayers = gameState.battingTeam == 0 ? gameState.teamA.players : gameState.teamB.players
+        let nonStrikeBatterId = (gameState.onStrike == 1 ? gameState.currentBatter1?.id : gameState.currentBatter2?.id)
+        
+        if let batterId = nonStrikeBatterId {
+            return battingTeamPlayers.first { $0.id == batterId }
+        }
+        return nil
+    }
+    
+    private func getCurrentBowler() -> Player? {
+        let bowlingTeamPlayers = gameState.bowlingTeam == 0 ? gameState.teamA.players : gameState.teamB.players
+        
+        if let bowlerId = gameState.currentBowler?.id {
+            return bowlingTeamPlayers.first { $0.id == bowlerId }
+        }
+        return nil
+    }
+    
+    // MARK: - Player Change Detection
+    
+    private func checkForPlayerChanges() {
+        checkForBowlerChange()
+        checkForBatterChange()
+    }
+    
+    private func checkForBowlerChange() {
+        guard let currentBowler = getCurrentBowler() else { return }
+        
+        // Show bowler selection only when over is complete
+        if currentBowler.ballsInCurrentOver == 0 &&
+           currentBowler.ballsBowled > 0 &&
+           gameState.ballsCompleted < gameState.totalBallsInInnings {
+            showBowlerSelection = true
+        }
+    }
+    
+    private func checkForBatterChange() {
         let battingTeamPlayers = gameState.battingTeam == 0 ? gameState.teamA.players : gameState.teamB.players
         
-        // Check on-strike batter
-        if let onStrikeBatterId = (gameState.onStrike == 0 ? gameState.currentBatter1?.id : gameState.currentBatter2?.id),
-           let onStrikeBatter = battingTeamPlayers.first(where: { $0.id == onStrikeBatterId }),
-           onStrikeBatter.ballsFaced >= onStrikeBatter.ballQuota {
+        // Check if batter 1 has completed their quota
+        if let batter1 = gameState.currentBatter1,
+           let player1 = battingTeamPlayers.first(where: { $0.id == batter1.id }),
+           player1.ballsFaced >= player1.ballQuota {
             showBatterSelection = true
             return
         }
         
-        // Check non-strike batter
-        if let nonStrikeBatterId = (gameState.onStrike == 1 ? gameState.currentBatter1?.id : gameState.currentBatter2?.id),
-           let nonStrikeBatter = battingTeamPlayers.first(where: { $0.id == nonStrikeBatterId }),
-           nonStrikeBatter.ballsFaced >= nonStrikeBatter.ballQuota {
+        // Check if batter 2 has completed their quota
+        if let batter2 = gameState.currentBatter2,
+           let player2 = battingTeamPlayers.first(where: { $0.id == batter2.id }),
+           player2.ballsFaced >= player2.ballQuota {
             showBatterSelection = true
             return
         }
     }
-
 
 }

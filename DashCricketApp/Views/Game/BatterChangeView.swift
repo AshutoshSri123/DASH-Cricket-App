@@ -3,7 +3,6 @@ import SwiftUI
 struct BatterChangeView: View {
     @ObservedObject var gameState: GameState
     @Binding var isPresented: Bool
-    @State private var selectedBatter: Player?
     
     var availableBatters: [Player] {
         let team = gameState.battingTeam == 0 ? gameState.teamA : gameState.teamB
@@ -17,31 +16,29 @@ struct BatterChangeView: View {
     
     var body: some View {
         NavigationView {
-            VStack(spacing: 30) {
+            VStack(spacing: 20) {
                 Text("Select Next Batter")
                     .font(.title)
                     .fontWeight(.bold)
                 
+                Text("Current batter has completed their quota")
+                    .font(.subheadline)
+                    .foregroundColor(.orange)
+                
                 ForEach(availableBatters, id: \.id) { batter in
                     Button(action: {
-                        selectedBatter = batter
-                        // Replace the batter who completed their quota
-                        if gameState.onStrike == 0 {
-                            gameState.currentBatter1 = batter
-                        } else {
-                            gameState.currentBatter2 = batter
-                        }
-                        isPresented = false
+                        replaceBatter(with: batter)
                     }) {
-                        VStack(alignment: .leading) {
-                            Text(batter.name)
-                                .font(.headline)
-                                .foregroundColor(.primary)
-                            Text("\(batter.role.rawValue) - \(batter.ballsFaced)/\(batter.ballQuota) balls faced")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
+                        HStack {
+                            VStack(alignment: .leading) {
+                                Text(batter.name)
+                                    .font(.headline)
+                                Text("\(batter.role.rawValue) - \(batter.ballsFaced)/\(batter.ballQuota) balls")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            Spacer()
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
                         .padding()
                         .background(Color.gray.opacity(0.1))
                         .cornerRadius(10)
@@ -51,13 +48,31 @@ struct BatterChangeView: View {
                 Spacer()
             }
             .padding()
-            .navigationTitle("Select Batter")
+            .navigationTitle("Replace Batter")
             .navigationBarTitleDisplayMode(.inline)
-            .navigationBarItems(
-                trailing: Button("Cancel") {
-                    isPresented = false
-                }
-            )
+        }
+    }
+    
+    private func replaceBatter(with newBatter: Player) {
+        // Find which batter needs replacement
+        let battingTeamPlayers = gameState.battingTeam == 0 ? gameState.teamA.players : gameState.teamB.players
+        
+        // Check current batter 1
+        if let batter1 = gameState.currentBatter1,
+           let player1 = battingTeamPlayers.first(where: { $0.id == batter1.id }),
+           player1.ballsFaced >= player1.ballQuota {
+            gameState.currentBatter1 = newBatter
+            isPresented = false
+            return
+        }
+        
+        // Check current batter 2
+        if let batter2 = gameState.currentBatter2,
+           let player2 = battingTeamPlayers.first(where: { $0.id == batter2.id }),
+           player2.ballsFaced >= player2.ballQuota {
+            gameState.currentBatter2 = newBatter
+            isPresented = false
+            return
         }
     }
 }
